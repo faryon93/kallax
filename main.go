@@ -46,6 +46,8 @@ import (
 
 const (
 	BaseDomain = "kallax.local"
+	PromListen = ":9010"
+	DnsListen  = ":5454"
 )
 
 // ---------------------------------------------------------------------------------------
@@ -53,7 +55,8 @@ const (
 // ---------------------------------------------------------------------------------------
 
 var (
-	Colors bool
+	Colors     bool
+	DockerHost string
 
 	Store store.Store
 
@@ -142,6 +145,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 
 func main() {
 	flag.BoolVar(&Colors, "color", false, "force color logging")
+	flag.StringVar(&DockerHost, "docker", "unix:///var/run/docker.sock", "docker host")
 	flag.Parse()
 
 	// setup logger
@@ -151,25 +155,27 @@ func main() {
 	logrus.Infoln("starting", GetAppVersion())
 
 	var err error
-	Store, err = store.NewDocker(client.WithHost("tcp://10.0.28.186:2376"))
+	Store, err = store.NewDocker(client.WithHost(DockerHost))
 	if err != nil {
 		logrus.Errorln("failed to create docker swarm store:", err.Error())
 		os.Exit(-1)
 	}
+	logrus.Infoln("connected to docker on", DockerHost)
 
+	// start prometheus metrics endpoint
 	go func() {
-		logrus.Infoln("listening \"prom-metrics\" on :9010")
+		logrus.Infoln("listening \"prom-metrics\" on", PromListen)
 		http.Handle("/metrics", promhttp.Handler())
-		err := http.ListenAndServe(":9010", nil)
+		err := http.ListenAndServe(PromListen, nil)
 		if err != nil {
 			logrus.Errorln("metrics endpoint failed:", err.Error())
 		}
 	}()
 
-	// start he DNS server
-	server := &dns.Server{Addr: ":5454", Net: "udp"}
+	// start DNS server
+	server := &dns.Server{Addr: DnsListen, Net: "udp"}
 	go func() {
-		logrus.Info("listening \"dns\" on :5454")
+		logrus.Info("listening \"dns\" on", DnsListen)
 		chain := dnsadapt.ChainFunc(handleDnsQuery, dnsadapt.PromHistogram(metric.ProcessingTime))
 		dns.Handle(".", chain)
 		err = server.ListenAndServe()
