@@ -149,7 +149,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 func main() {
 	flag.BoolVar(&Colors, "color", false, "force color logging")
 	flag.StringVar(&DockerHost, "docker", "unix:///var/run/docker.sock", "docker host")
-	flag.StringVar(&DnsListen, "dns-listen", ":5454", "dns udp listen")
+	flag.StringVar(&DnsListen, "dns-listen", ":5353", "dns udp listen")
 	flag.StringVar(&PromListen, "prom-listen", ":9800", "prometheus http listen")
 	flag.Parse()
 
