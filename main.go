@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"syscall"
 
 	"github.com/docker/docker/client"
@@ -89,6 +90,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 
 		switch q.Qtype {
 		case dns.TypeA:
+			// TODO: sanitize input
 			pp := reEndpointName.FindStringSubmatch(q.Name)
 			if len(pp) < 1 {
 				return
@@ -114,7 +116,9 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 			}
 
 		case dns.TypeSRV:
-			eps, err := Store.GetGroupEndpoints("test")
+			// TODO: sanitize input
+			groupName := strings.TrimRight(q.Name, BaseDomain+".")
+			eps, err := Store.GetGroupEndpoints(groupName)
 			if err != nil {
 				logrus.Errorln("failed to query group endpoints:", err.Error())
 				return
@@ -177,7 +181,7 @@ func main() {
 	go func() {
 		logrus.Info("listening \"dns\" on", DnsListen)
 		chain := dnsadapt.ChainFunc(handleDnsQuery, dnsadapt.PromHistogram(metric.ProcessingTime))
-		dns.Handle(".", chain)
+		dns.Handle(BaseDomain+".", chain)
 		err = server.ListenAndServe()
 		if err != nil {
 			logrus.Fatalf("failed to start DNS server: %s\n ", err.Error())
