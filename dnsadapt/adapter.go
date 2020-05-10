@@ -1,4 +1,4 @@
-package store
+package dnsadapt
 
 // swarm-dns-sd
 // Copyright (C) 2020 Maximilian Pachl
@@ -20,13 +20,29 @@ package store
 //  imports
 // ---------------------------------------------------------------------------------------
 
-import ()
+import (
+	"github.com/miekg/dns"
+)
 
 // ---------------------------------------------------------------------------------------
 //  types
 // ---------------------------------------------------------------------------------------
 
-type Endpoint struct {
-	Name string
-	Port int
+type DnsAdapter func(handler dns.Handler) dns.Handler
+
+// ---------------------------------------------------------------------------------------
+//  public functions
+// ---------------------------------------------------------------------------------------
+
+// Chain chains a http.Handler with the given adapters.
+func Chain(h dns.Handler, adapters ...DnsAdapter) dns.Handler {
+	for _, adapter := range adapters {
+		h = adapter(h)
+	}
+	return h
+}
+
+// ChainFunc chains a http.HandlerFunc with the given adapater.
+func ChainFunc(h dns.HandlerFunc, adapters ...DnsAdapter) dns.Handler {
+	return Chain(dns.HandlerFunc(h), adapters...)
 }

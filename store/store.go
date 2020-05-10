@@ -21,6 +21,6 @@ package store
 // ---------------------------------------------------------------------------------------
 
 type Store interface {
-    GetGroupEndpoints(group string) ([]*Endpoint, error)
-    GetTaskIpAddresses(taskId string) ([]string, error)
+	GetGroupEndpoints(group string) ([]*Endpoint, error)
+	GetTaskIpAddresses(taskId string) ([]string, error)
 }

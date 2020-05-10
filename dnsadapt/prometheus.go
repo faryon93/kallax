@@ -1,4 +1,4 @@
-package store
+package dnsadapt
 
 // swarm-dns-sd
 // Copyright (C) 2020 Maximilian Pachl
@@ -20,13 +20,23 @@ package store
 //  imports
 // ---------------------------------------------------------------------------------------
 
-import ()
+import (
+	"time"
+
+	"github.com/miekg/dns"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // ---------------------------------------------------------------------------------------
-//  types
+//  public functions
 // ---------------------------------------------------------------------------------------
 
-type Endpoint struct {
-	Name string
-	Port int
+func PromHistogram(hist prometheus.Histogram) DnsAdapter {
+	return func(h dns.Handler) dns.Handler {
+		return dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+			startTime := time.Now()
+			h.ServeDNS(w, r)
+			hist.Observe(time.Since(startTime).Seconds())
+		})
+	}
 }

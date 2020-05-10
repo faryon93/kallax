@@ -1,4 +1,4 @@
-package store
+package main
 
 // swarm-dns-sd
 // Copyright (C) 2020 Maximilian Pachl
@@ -17,16 +17,47 @@ package store
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // ---------------------------------------------------------------------------------------
-//  imports
+//  global variables
 // ---------------------------------------------------------------------------------------
 
-import ()
+var (
+	// release information
+	AppName    = "kallax"
+	AppVersion = "0.1"
+
+	// filled by build tool
+	GitCommit   string
+	GitBranch   string
+	BuildTime   string
+	BuildNumber string
+)
 
 // ---------------------------------------------------------------------------------------
-//  types
+//  public functions
 // ---------------------------------------------------------------------------------------
 
-type Endpoint struct {
-	Name string
-	Port int
+// Returns the application version string.
+func GetAppVersion() string {
+	str := AppName + " " + AppVersion
+	if len(BuildNumber) > 0 {
+		str += "-" + BuildNumber
+	}
+
+	if len(GitCommit) > 0 {
+		str += " (#" + GitCommit
+	}
+
+	if len(GitBranch) > 0 {
+		str += "-" + GitBranch
+	}
+
+	if len(BuildTime) > 0 {
+		str += " / " + BuildTime + ")"
+	} else {
+		if len(GitCommit) > 0 {
+			str += ")"
+		}
+	}
+
+	return str
 }

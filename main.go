@@ -21,17 +21,23 @@ package main
 // ---------------------------------------------------------------------------------------
 
 import (
+	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 	"syscall"
 
 	"github.com/docker/docker/client"
-	"github.com/faryon93/kallax/store"
 	"github.com/faryon93/util"
 	"github.com/miekg/dns"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
+
+	"github.com/faryon93/kallax/dnsadapt"
+	"github.com/faryon93/kallax/metric"
+	"github.com/faryon93/kallax/store"
 )
 
 // ---------------------------------------------------------------------------------------
@@ -47,6 +53,8 @@ const (
 // ---------------------------------------------------------------------------------------
 
 var (
+	Colors bool
+
 	Store store.Store
 
 	reEndpointName = regexp.MustCompile("([A-Za-z0-9_-]+)\\.task-(\\d+)-([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.kallax\\.local")
@@ -133,21 +141,43 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 // ---------------------------------------------------------------------------------------
 
 func main() {
+	flag.BoolVar(&Colors, "color", false, "force color logging")
+	flag.Parse()
+
+	// setup logger
+	formater := logrus.TextFormatter{ForceColors: Colors}
+	logrus.SetFormatter(&formater)
+	logrus.SetOutput(os.Stdout)
+	logrus.Infoln("starting", GetAppVersion())
+
 	var err error
 	Store, err = store.NewDocker(client.WithHost("tcp://10.0.28.186:2376"))
 	if err != nil {
 		logrus.Errorln("failed to create docker swarm store:", err.Error())
-		return
+		os.Exit(-1)
 	}
 
+	go func() {
+		logrus.Infoln("listening \"prom-metrics\" on :9010")
+		http.Handle("/metrics", promhttp.Handler())
+		err := http.ListenAndServe(":9010", nil)
+		if err != nil {
+			logrus.Errorln("metrics endpoint failed:", err.Error())
+		}
+	}()
+
 	// start he DNS server
-	dns.HandleFunc(".", handleDnsQuery)
 	server := &dns.Server{Addr: ":5454", Net: "udp"}
-	err = server.ListenAndServe()
+	go func() {
+		logrus.Info("listening \"dns\" on :5454")
+		chain := dnsadapt.ChainFunc(handleDnsQuery, dnsadapt.PromHistogram(metric.ProcessingTime))
+		dns.Handle(".", chain)
+		err = server.ListenAndServe()
+		if err != nil {
+			logrus.Fatalf("failed to start DNS server: %s\n ", err.Error())
+		}
+	}()
 	defer server.Shutdown()
-	if err != nil {
-		log.Fatalf("Failed to start server: %s\n ", err.Error())
-	}
 
 	util.WaitSignal(os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	log.Println("received SIGINT / SIGTERM going to shutdown")
