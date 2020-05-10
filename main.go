@@ -61,7 +61,7 @@ var (
 
 	Store store.Store
 
-	reEndpointName = regexp.MustCompile("([A-Za-z0-9_-]+)\\.task-(\\d+)-([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.kallax\\.local")
+	reEndpointName = regexp.MustCompile("([A-Za-z0-9_-]+)\\.task-(\\d+)-([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\.kallax\\.local")
 )
 
 // ---------------------------------------------------------------------------------------
@@ -87,7 +87,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 
 	// answer all questions if possible
 	for _, q := range m.Question {
-		log.Printf("Query for %s\n", q.Name)
+		logrus.Infof("Query for %s: %d", q.Name, q.Qtype)
 
 		switch q.Qtype {
 		case dns.TypeA:
@@ -98,23 +98,21 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 			}
 
 			taskId := pp[3]
-			addrs, err := Store.GetTaskIpAddresses(taskId)
+			networkId := pp[6]
+			addr, err := Store.GetTaskIpAddresses(taskId, networkId)
 			if err != nil {
 				logrus.Errorln("failed to get task ip addresses:", err.Error())
 				return
 			}
 
-			// todo: richtig ip addresse auswaehlen
-			for _, addr := range addrs {
-				record := fmt.Sprintf("%s A %s", q.Name, addr)
-				rr, err := dns.NewRR(record)
-				if err != nil {
-					logrus.Error("failed to construct DNS A-RR:", err.Error())
-					continue
-				}
-				m.Answer = append(m.Answer, rr)
-				log.Printf("\t-> %s", addr)
+			record := fmt.Sprintf("%s 15 IN A %s", q.Name, addr)
+			rr, err := dns.NewRR(record)
+			if err != nil {
+				logrus.Error("failed to construct DNS A-RR:", err.Error())
+				continue
 			}
+			m.Answer = append(m.Answer, rr)
+			log.Printf("\t-> %s", addr)
 
 		case dns.TypeSRV:
 			// TODO: sanitize input
@@ -184,12 +182,13 @@ func main() {
 	// start DNS server
 	server := &dns.Server{Addr: DnsListen, Net: "udp"}
 	go func() {
-		logrus.Info("listening \"dns\" on", DnsListen)
+		logrus.Infoln("listening \"dns\" on", DnsListen)
 		chain := dnsadapt.ChainFunc(handleDnsQuery, dnsadapt.PromHistogram(metric.ProcessingTime))
 		dns.Handle(BaseDomain+".", chain)
 		err = server.ListenAndServe()
 		if err != nil {
 			logrus.Fatalf("failed to start DNS server: %s\n ", err.Error())
+			os.Exit(-1)
 		}
 	}()
 	defer server.Shutdown()

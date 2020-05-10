@@ -20,7 +20,7 @@ package store
 //  types
 // ---------------------------------------------------------------------------------------
 
-type Store interface {
-	GetGroupEndpoints(group string) ([]*Endpoint, error)
-	GetTaskIpAddresses(taskId string, networkId string) (string, error)
+type EndpointSpec struct {
+	Port    int    `json:"port"`
+	Network string `json:"net"`
 }

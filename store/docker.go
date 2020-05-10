@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/docker/docker/api/types"
@@ -93,7 +94,7 @@ func (d *docker) GetGroupEndpoints(group string) ([]*Endpoint, error) {
 
 	for _, service := range services {
 		// parse endpoint specification from swarm label
-		var endpointSpecs map[string]int
+		var endpointSpecs map[string]*EndpointSpec
 		err = json.Unmarshal([]byte(service.Spec.Labels[groupLabel]), &endpointSpecs)
 		if err != nil {
 			return nil, err
@@ -123,11 +124,12 @@ func (d *docker) GetGroupEndpoints(group string) ([]*Endpoint, error) {
 				nodeName = task.NodeID
 			}
 
-			for epName, epPort := range endpointSpecs {
+			for epName, epSpec := range endpointSpecs {
 				endpoints = append(endpoints, &Endpoint{
-					Name: fmt.Sprintf("%s.task-%d-%s.%s.%s",
-						epName, task.Slot, task.ID, service.Spec.Name, nodeName),
-					Port: epPort,
+					Name: fmt.Sprintf("%s.task-%d-%s.%s.%s.%s",
+						epName, task.Slot, task.ID, service.Spec.Name,
+						nodeName, epSpec.Network),
+					Port: epSpec.Port,
 				})
 			}
 		}
@@ -136,19 +138,30 @@ func (d *docker) GetGroupEndpoints(group string) ([]*Endpoint, error) {
 	return endpoints, nil
 }
 
-func (d *docker) GetTaskIpAddresses(taskId string) ([]string, error) {
+func (d *docker) GetTaskIpAddresses(taskId string, networkId string) (string, error) {
 	task, _, err := d.client.TaskInspectWithRaw(context.Background(), taskId)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	ips := make([]string, len(task.NetworksAttachments))
-	for i, net := range task.NetworksAttachments {
-		// Todo: properly strip the network part
-		ips[i] = net.Addresses[0][0 : len(net.Addresses[0])-3]
+	ip := ""
+	for _, network := range task.NetworksAttachments {
+		if network.Network.ID == networkId && len(network.Addresses) > 0 {
+			addr, _, err := net.ParseCIDR(network.Addresses[0])
+			if err != nil {
+				return "", err
+			}
+
+			ip = addr.String()
+		}
 	}
 
-	return ips, nil
+	if ip == "" {
+		return "", fmt.Errorf("task \"%s\" is not attached to network \"%s\"",
+			taskId, networkId)
+	}
+
+	return ip, nil
 }
 
 // ---------------------------------------------------------------------------------------
