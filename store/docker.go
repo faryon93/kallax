@@ -24,11 +24,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
+	"github.com/sirupsen/logrus"
 )
 
 // ---------------------------------------------------------------------------------------
@@ -45,6 +47,9 @@ const (
 
 type docker struct {
 	client *client.Client
+
+	nodesNames     map[string]string
+	nodeNamesMutex sync.Mutex
 }
 
 // ---------------------------------------------------------------------------------------
@@ -53,9 +58,11 @@ type docker struct {
 
 // NewDocker constructs a new Store backed by a docker Swarm cluster.
 func NewDocker(ops ...client.Opt) (Store, error) {
-	var d docker
-	var err error
+	d := docker{
+		nodesNames: make(map[string]string),
+	}
 
+	var err error
 	d.client, err = client.NewClientWithOpts(ops...)
 	if err != nil {
 		return nil, err
@@ -109,10 +116,17 @@ func (d *docker) GetGroupEndpoints(group string) ([]*Endpoint, error) {
 				continue
 			}
 
+			// convert the node ID to a user readable name
+			nodeName, err := d.getNodeName(task.NodeID)
+			if err != nil {
+				logrus.Errorln("failed to query node name:", err.Error())
+				nodeName = task.NodeID
+			}
+
 			for epName, epPort := range endpointSpecs {
 				endpoints = append(endpoints, &Endpoint{
 					Name: fmt.Sprintf("%s.task-%d-%s.%s.%s",
-						epName, task.Slot, task.ID, service.Spec.Name, task.NodeID),
+						epName, task.Slot, task.ID, service.Spec.Name, nodeName),
 					Port: epPort,
 				})
 			}
@@ -135,4 +149,27 @@ func (d *docker) GetTaskIpAddresses(taskId string) ([]string, error) {
 	}
 
 	return ips, nil
+}
+
+// ---------------------------------------------------------------------------------------
+//  private members
+// ---------------------------------------------------------------------------------------
+
+// getNodeName returns the name of a swarm nodeby its ID.
+func (d *docker) getNodeName(nodeId string) (string, error) {
+	d.nodeNamesMutex.Lock()
+	defer d.nodeNamesMutex.Unlock()
+
+	nodeName, ok := d.nodesNames[nodeId]
+	if !ok {
+		node, _, err := d.client.NodeInspectWithRaw(context.Background(), nodeId)
+		if err != nil {
+			return "", err
+		}
+
+		nodeName = node.Description.Hostname
+		d.nodesNames[nodeId] = node.Description.Hostname
+	}
+
+	return nodeName, nil
 }
