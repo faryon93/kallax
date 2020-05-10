@@ -69,7 +69,8 @@ var (
 // ---------------------------------------------------------------------------------------
 
 func MakeSrvRRFromEndpoint(q *dns.Question, ep *store.Endpoint) (dns.RR, error) {
-	return dns.NewRR(fmt.Sprintf("%s 15 IN SRV 10 60 %d %s.%s",
+	// TTL IN SRV priority weight port target
+	return dns.NewRR(fmt.Sprintf("%s 15 IN SRV 10 0 %d %s.%s.",
 		q.Name, ep.Port, ep.Name, BaseDomain))
 }
 
@@ -132,7 +133,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 				}
 				m.Answer = append(m.Answer, rr)
 
-				log.Println("\t->", ep.Name)
+				log.Printf("\t-> %s:%d", ep.Name, ep.Port)
 			}
 		}
 	}
