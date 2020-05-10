@@ -160,7 +160,7 @@ func main() {
 	logrus.Infoln("starting", GetAppVersion())
 
 	var err error
-	Store, err = store.NewDocker(client.WithHost(DockerHost))
+	Store, err = store.NewDocker(client.WithHost(DockerHost), client.WithAPIVersionNegotiation())
 	if err != nil {
 		logrus.Errorln("failed to create docker swarm store:", err.Error())
 		os.Exit(-1)
