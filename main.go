@@ -23,7 +23,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -55,6 +54,7 @@ const (
 
 var (
 	Colors     bool
+	Debug	   bool
 	DockerHost string
 	DnsListen  string
 	PromListen string
@@ -87,7 +87,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 
 	// answer all questions if possible
 	for _, q := range m.Question {
-		logrus.Infof("Query for %s: %d", q.Name, q.Qtype)
+		logrus.Debugf("Query for \"%s\" (%d)", q.Name, q.Qtype)
 
 		switch q.Qtype {
 		case dns.TypeA:
@@ -112,7 +112,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 				continue
 			}
 			m.Answer = append(m.Answer, rr)
-			log.Printf("\t-> %s", addr)
+			logrus.Debugf("%s", addr)
 
 		case dns.TypeSRV:
 			// TODO: sanitize input
@@ -131,7 +131,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 				}
 				m.Answer = append(m.Answer, rr)
 
-				log.Printf("\t-> %s:%d", ep.Name, ep.Port)
+				logrus.Debugf("%s:%d", ep.Name, ep.Port)
 			}
 		}
 	}
@@ -148,6 +148,7 @@ func handleDnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 
 func main() {
 	flag.BoolVar(&Colors, "color", false, "force color logging")
+	flag.BoolVar(&Debug, "debug", false, "turn on debug log")
 	flag.StringVar(&DockerHost, "docker", "unix:///var/run/docker.sock", "docker host")
 	flag.StringVar(&DnsListen, "dns-listen", ":5353", "dns udp listen")
 	flag.StringVar(&PromListen, "prom-listen", ":9800", "prometheus http listen")
@@ -157,6 +158,9 @@ func main() {
 	formater := logrus.TextFormatter{ForceColors: Colors}
 	logrus.SetFormatter(&formater)
 	logrus.SetOutput(os.Stdout)
+	if Debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
 	logrus.Infoln("starting", GetAppVersion())
 
 	var err error
@@ -194,5 +198,5 @@ func main() {
 	defer server.Shutdown()
 
 	util.WaitSignal(os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	log.Println("received SIGINT / SIGTERM going to shutdown")
+	logrus.Println("received SIGINT / SIGTERM going to shutdown")
 }
